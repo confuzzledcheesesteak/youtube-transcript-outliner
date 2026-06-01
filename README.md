@@ -69,3 +69,23 @@ Existing transcript tools usually support URL paste, timestamps, exports, and su
 ## License
 
 MIT
+
+
+## Self-hosted transcript proxy
+
+Some YouTube videos expose transcripts in the YouTube UI but block transcript requests from Vercel/datacenter IPs with `LOGIN_REQUIRED` bot checks. This repo includes a small optional proxy in `self-hosted-proxy/` that can run on a Raspberry Pi or other trusted machine and expose `POST /transcript` via Cloudflare Tunnel.
+
+Current production build falls back to `TRANSCRIPT_PROXY_URL` when direct Vercel extraction fails. If no environment variable is set, the API route has a Cloudflare quick-tunnel fallback URL embedded for the current Hermes Pi tunnel. Quick tunnels are convenient but not permanent; for production, replace it with a named Cloudflare Tunnel URL or another stable self-hosted endpoint.
+
+Local proxy commands:
+
+```bash
+cd self-hosted-proxy
+npm install
+PORT=3791 npm start
+```
+
+Expected endpoints:
+
+- `GET /health`
+- `POST /transcript` with `{ "url": "https://www.youtube.com/watch?v=..." }` or `{ "videoId": "..." }`
