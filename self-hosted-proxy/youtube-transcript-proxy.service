@@ -1,0 +1,14 @@
+[Unit]
+Description=Self-hosted YouTube transcript proxy
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/colton/youtube-transcript-proxy
+ExecStart=/home/colton/.local/bin/npm start
+Restart=always
+RestartSec=5
+Environment=PORT=3791
+
+[Install]
+WantedBy=default.target
