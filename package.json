@@ -1,0 +1,35 @@
+{
+  "name": "youtube-transcript-outliner",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A polished YouTube transcript outliner that turns captions into timestamped sections, outlines, summaries, and readable notes.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "keywords": [
+    "youtube",
+    "transcript",
+    "captions",
+    "outline",
+    "nextjs"
+  ],
+  "author": "Colton Hong",
+  "license": "MIT",
+  "dependencies": {
+    "@vercel/node": "latest",
+    "lucide-react": "latest",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "youtube-transcript": "latest"
+  },
+  "devDependencies": {
+    "typescript": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest"
+  }
+}
