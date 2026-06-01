@@ -47,27 +47,21 @@ Words: ${result.wordCount}
 ## AI summary
 ${summaryOverview(result)}
 
-${summaryParts(result).map((part, i) => `${i + 1}. **${part.title}** (${part.range}) — ${part.summary}`).join('
-')}
+${summaryParts(result).map((part, i) => `${i + 1}. **${part.title}** (${part.range}) — ${part.summary}`).join('\n')}
 
 ## Clean paragraph transcript
 ${cleanReadableText(result)}
 
 ## Outline
-${result.outline.map((s, i) => `${i + 1}. **${s.title}** (${s.range}) — ${s.summary}`).join('
-')}
+${result.outline.map((s, i) => `${i + 1}. **${s.title}** (${s.range}) — ${s.summary}`).join('\n')}
 
 ## Segmented transcript
 ${result.segments.map((s) => `### ${s.title} (${s.range})
 ${s.summary}
 
-${s.lines.map((l) => `[${l.time}] ${l.text}`).join('
-')}`).join('
-
-')}
+${s.lines.map((l) => `[${l.time}] ${l.text}`).join('\n')}`).join('\n\n')}
 `;
 }
-
 export default function Home() {
   const [mode, setMode] = useState<'youtube' | 'manual'>('youtube');
   const [url, setUrl] = useState('');
