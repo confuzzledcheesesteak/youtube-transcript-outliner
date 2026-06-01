@@ -4,7 +4,9 @@ A polished web app that turns a YouTube link into an outlined, segmented transcr
 
 ## Live app
 
-Deployment URL: _added after deployment_
+Deployment URL: https://youtube-transcript-outliner.vercel.app
+
+GitHub repository: https://github.com/confuzzledcheesesteak/youtube-transcript-outliner
 
 ## Features
 
