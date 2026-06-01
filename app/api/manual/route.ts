@@ -18,7 +18,7 @@ function parseTime(token: string) {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0];
 }
-function clean(text: string) { return text.replace(/\s+/g, ' ').trim(); }
+function clean(text: string) { return text.replace(/(?:^|\s)\[?(?:\d+:)?\d{1,2}:\d{2}\]?\s*/g, ' ').replace(/\s+/g, ' ').trim(); }
 function words(text: string) { return text.toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOPWORDS.has(w)); }
 function topKeywords(text: string, n = 5) {
   const counts = new Map<string, number>();
