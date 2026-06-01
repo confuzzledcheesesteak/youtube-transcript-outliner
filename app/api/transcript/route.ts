@@ -18,6 +18,7 @@ type Segment = {
 
 const STOPWORDS = new Set('the a an and or but so because to of in on for with from at by is are was were be been being i you we they he she it this that these those as into about like not no do does did can could should would will just if than then there their our your my me us them his her its what when where why how which who also more most some any all one two three get got going really actually right okay kind sort think know make made see use using used new first next last very over under up down out'.split(' '));
 const INNERTUBE_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+const TRANSCRIPT_PROXY_URL = process.env.TRANSCRIPT_PROXY_URL || 'https://graduated-solaris-jackets-inventory.trycloudflare.com/transcript';
 
 const INNERTUBE_CLIENTS = [
   {
@@ -160,15 +161,13 @@ async function fetchTitle(videoId: string) {
   }
 }
 
-function msOrSeconds(value: unknown) {
-  const n = Number(value || 0);
-  return n > 10000 ? n / 1000 : n;
-}
-
 function normalizePackageItems(rawTranscript: unknown[]) {
-  return (rawTranscript || [])
-    .map((item: any) => ({ text: cleanText(String(item.text || '')), duration: msOrSeconds(item.duration), offset: msOrSeconds(item.offset) }))
-    .filter((item: TranscriptItem) => item.text);
+  const rows = (rawTranscript || [])
+    .map((item: any) => ({ text: cleanText(String(item.text || '')), durationRaw: Number(item.duration || 0), offsetRaw: Number(item.offset || 0) }))
+    .filter((item: any) => item.text);
+  const maxOffset = Math.max(...rows.map((item: any) => item.offsetRaw), 0);
+  const scale = maxOffset > 1000 ? 1000 : 1;
+  return rows.map((item: any) => ({ text: item.text, duration: item.durationRaw / scale, offset: item.offsetRaw / scale }));
 }
 
 function chooseTrack(tracks: CaptionTrack[]) {
@@ -255,19 +254,48 @@ async function fetchViaMobileInnerTube(videoId: string) {
   return items;
 }
 
-async function fetchTranscriptItems(videoId: string) {
+async function fetchViaSelfHostedProxy(videoId: string): Promise<TranscriptItem[]> {
+  if (!TRANSCRIPT_PROXY_URL) throw new Error('No self-hosted transcript proxy configured.');
+  const res = await fetch(TRANSCRIPT_PROXY_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ videoId }),
+    cache: 'no-store',
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `Self-hosted transcript proxy failed with HTTP ${res.status}.`);
+  const items = Array.isArray(data?.items)
+    ? data.items.map((item: any) => ({ text: cleanText(String(item.text || '')), offset: Number(item.offset || 0), duration: Number(item.duration || 0) })).filter((item: TranscriptItem) => item.text)
+    : [];
+  if (!items.length) throw new Error('Self-hosted transcript proxy returned no transcript lines.');
+  return items;
+}
+
+async function fetchTranscriptItems(videoId: string): Promise<{ items: TranscriptItem[]; source: string }> {
+  const errors: string[] = [];
   try {
     const rawTranscript = await YoutubeTranscript.fetchTranscript(videoId);
     const items = normalizePackageItems(rawTranscript as unknown[]);
     if (items.length) return { items, source: 'youtube-transcript package' };
   } catch (error) {
-    // Some videos expose transcripts in YouTube's UI but the library reports
-    // "disabled" from web scraping. Fall through to mobile InnerTube clients,
-    // which mirror the approach used by robust transcript tools.
+    errors.push(`package: ${error instanceof Error ? error.message : String(error)}`);
   }
 
-  const items = await fetchViaMobileInnerTube(videoId);
-  return { items, source: 'mobile InnerTube timedtext fallback' };
+  try {
+    const items = await fetchViaMobileInnerTube(videoId);
+    return { items, source: 'mobile InnerTube timedtext fallback' };
+  } catch (error) {
+    errors.push(`mobile: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  try {
+    const items = await fetchViaSelfHostedProxy(videoId);
+    return { items, source: 'self-hosted transcript proxy' };
+  } catch (error) {
+    errors.push(`proxy: ${error instanceof Error ? error.message : String(error)}`);
+  }
+
+  throw new Error(errors.join(' | '));
 }
 
 function errorMessage(error: unknown) {
