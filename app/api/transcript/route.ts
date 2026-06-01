@@ -339,7 +339,10 @@ export async function POST(request: NextRequest) {
     if (!items.length) return NextResponse.json({ error: 'No caption text was returned for this video.' }, { status: 404 });
 
     const segments = makeSegments(items);
+    const displaySegments = segments.map((s) => ({ ...s, range: `${fmt(s.start)}–${fmt(s.end)}`, lines: s.lines.map((line) => ({ ...line, time: fmt(line.offset) })) }));
     const fullText = items.map((item) => `[${fmt(item.offset)}] ${item.text}`).join('\n');
+    const readableText = readableTranscript(items);
+    const aiSummary = buildAiSummary(displaySegments);
     const duration = Math.max(...items.map((item) => item.offset + item.duration), 0);
 
     return NextResponse.json({
@@ -354,8 +357,10 @@ export async function POST(request: NextRequest) {
       wordCount: words(items.map((x) => x.text).join(' ')).length,
       languageNote: `Fetched from YouTube captions via ${transcriptResult.source}. Auto-generated captions may contain recognition errors.`,
       outline: segments.map((s) => ({ id: s.id, title: s.title, start: s.start, end: s.end, range: `${fmt(s.start)}–${fmt(s.end)}`, summary: s.summary, keywords: s.keywords })),
-      segments: segments.map((s) => ({ ...s, range: `${fmt(s.start)}–${fmt(s.end)}`, lines: s.lines.map((line) => ({ ...line, time: fmt(line.offset) })) })),
+      segments: displaySegments,
       fullText,
+      readableText,
+      aiSummary,
     });
   } catch (error) {
     return NextResponse.json({ error: errorMessage(error), detail: error instanceof Error ? error.message : String(error) }, { status: 502 });
