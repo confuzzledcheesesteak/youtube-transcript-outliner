@@ -1,0 +1,13 @@
+[Unit]
+Description=Cloudflare quick tunnel for YouTube transcript proxy
+After=network-online.target youtube-transcript-proxy.service
+Wants=youtube-transcript-proxy.service
+
+[Service]
+Type=simple
+ExecStart=/home/colton/bin/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:3791
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
