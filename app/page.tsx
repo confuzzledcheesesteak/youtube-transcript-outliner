@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, BookOpen, CheckCircle2, Clipboard, Download, FileText, Layers3, Loader2, Play, RefreshCw, Sparkles, Wand2 } from 'lucide-react';
+import { AlertTriangle, BookOpen, CheckCircle2, Clipboard, Download, FileText, Layers3, Loader2, MessageSquareText, Play, RefreshCw, Sparkles, Wand2 } from 'lucide-react';
 
 type Line = { text: string; offset: number; duration: number; time: string };
 type Segment = { id: string; title: string; summary: string; start: number; end: number; range: string; keywords: string[]; lines: Line[] };
@@ -9,7 +9,8 @@ type Result = {
   videoId: string | null; url: string | null; title: string; author: string | null; thumbnail: string | null;
   durationLabel: string; transcriptCount: number; wordCount: number; languageNote: string;
   outline: Array<{ id: string; title: string; range: string; summary: string; keywords: string[] }>;
-  segments: Segment[]; fullText: string;
+  segments: Segment[]; fullText: string; readableText?: string;
+  aiSummary?: { overview: string; parts: Array<{ title: string; range: string; summary: string; keywords: string[] }> };
 };
 
 const EXAMPLE = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
@@ -22,8 +23,49 @@ function downloadText(name: string, text: string) {
   a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
 }
 
+function summaryParts(result: Result) {
+  return result.aiSummary?.parts?.length
+    ? result.aiSummary.parts
+    : result.segments.map((segment) => ({ title: segment.title, range: segment.range, summary: segment.summary, keywords: segment.keywords || [] }));
+}
+
+function summaryOverview(result: Result) {
+  return result.aiSummary?.overview || result.segments.map((segment) => segment.summary).filter(Boolean).join(' ') || 'Summary unavailable.';
+}
+
+function cleanReadableText(result: Result) {
+  return result.readableText || result.segments.map((s) => s.lines.map((l) => l.text).join(' ')).join(' ');
+}
+
 function resultAsMarkdown(result: Result) {
-  return `# ${result.title}\n\nAuthor: ${result.author || 'Unknown'}\nDuration: ${result.durationLabel}\nWords: ${result.wordCount}\n\n## Outline\n${result.outline.map((s, i) => `${i + 1}. **${s.title}** (${s.range}) — ${s.summary}`).join('\n')}\n\n## Segmented transcript\n${result.segments.map((s) => `### ${s.title} (${s.range})\n${s.summary}\n\n${s.lines.map((l) => `[${l.time}] ${l.text}`).join('\n')}`).join('\n\n')}\n`;
+  return `# ${result.title}
+
+Author: ${result.author || 'Unknown'}
+Duration: ${result.durationLabel}
+Words: ${result.wordCount}
+
+## AI summary
+${summaryOverview(result)}
+
+${summaryParts(result).map((part, i) => `${i + 1}. **${part.title}** (${part.range}) — ${part.summary}`).join('
+')}
+
+## Clean paragraph transcript
+${cleanReadableText(result)}
+
+## Outline
+${result.outline.map((s, i) => `${i + 1}. **${s.title}** (${s.range}) — ${s.summary}`).join('
+')}
+
+## Segmented transcript
+${result.segments.map((s) => `### ${s.title} (${s.range})
+${s.summary}
+
+${s.lines.map((l) => `[${l.time}] ${l.text}`).join('
+')}`).join('
+
+')}
+`;
 }
 
 export default function Home() {
@@ -62,14 +104,14 @@ export default function Home() {
       <nav className="nav">
         <div className="nav-inner">
           <div className="brand"><div className="logo">▶</div> Transcript Outliner</div>
-          <div className="nav-links"><a href="#tool">Tool</a><a href="#outline">Outline</a><a href="#limits">Limitations</a></div>
+          <div className="nav-links"><a href="#tool">Tool</a><a href="#summary">AI Summary</a><a href="#clean-transcript">Clean transcript</a><a href="#outline">Outline</a><a href="#limits">Limitations</a></div>
         </div>
       </nav>
 
       <section className="hero">
         <div className="badge-row"><span className="badge">YouTube captions → study notes</span><span className="badge pink">Timestamped sections</span><span className="badge red">Manual fallback</span></div>
         <h1>Turn a YouTube video into an outlined transcript.</h1>
-        <p>Paste a link and get clean chapters, section summaries, timestamped lines, copyable Markdown, and downloadable notes. No word soup.</p>
+        <p>Paste a link and get clean chapters, an AI-style summary of each part, a timestamp-free paragraph transcript, copyable Markdown, and downloadable notes. No word soup.</p>
       </section>
 
       <section id="tool" className="app-shell">
@@ -90,8 +132,8 @@ export default function Home() {
             {status && <div className={`status ${status.kind}`}>{status.kind === 'error' ? <AlertTriangle size={18}/> : status.kind === 'ok' ? <CheckCircle2 size={18}/> : loading ? <Loader2 size={18}/> : <BookOpen size={18}/>}<span>{status.text}</span></div>}
             <div className="feature-grid">
               <div className="feature"><Layers3 size={18}/><strong>Segmented</strong><span>Groups captions into scan-friendly sections with timestamp ranges.</span></div>
-              <div className="feature"><Sparkles size={18}/><strong>Summarized</strong><span>Creates lightweight summaries without inventing missing transcript text.</span></div>
-              <div className="feature"><Download size={18}/><strong>Portable</strong><span>Copy or download Markdown for notes, studying, or research.</span></div>
+              <div className="feature"><Sparkles size={18}/><strong>AI summary</strong><span>Highlights the main idea and summarizes each part of the video.</span></div>
+              <div className="feature"><MessageSquareText size={18}/><strong>Clean transcript</strong><span>Shows the transcript as normal paragraphs without noisy timestamps.</span></div>
             </div>
           </div>
         </div>
@@ -101,21 +143,25 @@ export default function Home() {
           <div className="panel-pad meta-grid" id="limits">
             <div className="meta-card"><div className="meta-label">Primary path</div><div className="meta-value">Public YouTube captions</div><p className="tiny">Uses server-side caption fetching so browsers do not hit CORS issues.</p></div>
             <div className="meta-card"><div className="meta-label">Fallback</div><div className="meta-value">Manual transcript mode</div><p className="tiny">If a video has captions disabled or YouTube blocks cloud requests, paste subtitles/transcript text directly.</p></div>
-            <div className="meta-card"><div className="meta-label">Output</div><div className="meta-value">Outline + segments + Markdown</div><p className="tiny">No fabricated transcript text. Summaries are based only on returned or pasted captions.</p></div>
+            <div className="meta-card"><div className="meta-label">Output</div><div className="meta-value">Summary + clean transcript + Markdown</div><p className="tiny">No fabricated transcript text. Summaries are based only on returned or pasted captions.</p></div>
           </div>
         </aside>
       </section>
 
       <section className="results" id="outline">
-        {!result && <div className="panel empty"><Sparkles size={28}/><h2>Your outlined transcript will appear here.</h2><p>Expect a video header, clickable outline, section summaries, and timestamped transcript lines.</p></div>}
+        {!result && <div className="panel empty"><Sparkles size={28}/><h2>Your outlined transcript will appear here.</h2><p>Expect a video header, AI summary, clean paragraph transcript, clickable outline, and timestamped transcript lines.</p></div>}
         {result && <>
           <div className="panel panel-pad video-head">
             <div><h2 className="video-title">{result.title}</h2><div className="kpis"><span className="kpi">{result.author || 'Unknown author'}</span><span className="kpi">{result.durationLabel}</span><span className="kpi">{result.wordCount.toLocaleString()} keywords/words</span><span className="kpi">{result.transcriptCount} caption lines</span></div><p className="tiny">{result.languageNote}</p></div>
             <div className="actions"><button className="btn btn-blue" onClick={copyMarkdown}><Clipboard size={16}/>Copy Markdown</button><button className="btn btn-ghost" onClick={() => downloadText('transcript-outline.md', markdown)}><Download size={16}/>Download</button><button className="btn btn-ghost" onClick={() => { setResult(null); setStatus({ kind: 'info', text: 'Ready for another video.' }); }}><RefreshCw size={16}/>Reset</button></div>
           </div>
           <div className="section-grid">
-            <aside className="outline panel panel-pad"><div className="meta-label">Outline</div>{result.outline.map((s) => <a key={s.id} href={`#${s.id}`}><time>{s.range}</time>{s.title}</a>)}</aside>
-            <div className="segments">{result.segments.map((segment) => <article className="segment" id={segment.id} key={segment.id}><div className="segment-top"><h3>{segment.title}</h3><span className="time-pill">{segment.range}</span></div><div className="summary">{segment.summary}</div><div className="transcript">{segment.lines.map((line, i) => <p className="caption-line" key={`${segment.id}-${i}`}><time>{line.time}</time>{line.text}</p>)}</div></article>)}</div>
+            <aside className="outline panel panel-pad"><div className="meta-label">Jump to</div><a href="#summary"><time>Overview</time>AI summary</a><a href="#clean-transcript"><time>No timestamps</time>Clean paragraph transcript</a>{result.outline.map((s) => <a key={s.id} href={`#${s.id}`}><time>{s.range}</time>{s.title}</a>)}</aside>
+            <div className="segments">
+              <article className="segment summary-panel" id="summary"><div className="segment-top"><h3>AI summary</h3><span className="time-pill">{result.durationLabel}</span></div><div className="summary overview">{summaryOverview(result)}</div><div className="part-list">{summaryParts(result).map((part, i) => <div className="part-card" key={`${part.range}-${i}`}><div><strong>{part.title}</strong><time>{part.range}</time></div><p>{part.summary}</p>{part.keywords?.length ? <div className="keyword-row">{part.keywords.map((keyword) => <span key={keyword}>{keyword}</span>)}</div> : null}</div>)}</div></article>
+              <article className="segment" id="clean-transcript"><div className="segment-top"><h3>Clean paragraph transcript</h3><span className="time-pill">No timestamps</span></div><div className="readable-transcript">{cleanReadableText(result).split(/(?<=[.!?])\s+/).filter(Boolean).map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div></article>
+              {result.segments.map((segment) => <article className="segment" id={segment.id} key={segment.id}><div className="segment-top"><h3>{segment.title}</h3><span className="time-pill">{segment.range}</span></div><div className="summary">{segment.summary}</div><div className="transcript">{segment.lines.map((line, i) => <p className="caption-line" key={`${segment.id}-${i}`}><time>{line.time}</time>{line.text}</p>)}</div></article>)}
+            </div>
           </div>
         </>}
       </section>
