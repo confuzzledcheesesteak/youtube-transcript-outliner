@@ -25,6 +25,22 @@ function topKeywords(text: string, n = 5) {
   for (const w of words(text)) counts.set(w, (counts.get(w) || 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
 }
+function readableTranscript(lines: { text: string }[]) {
+  return clean(lines.map((line) => line.text).join(' '));
+}
+
+function buildAiSummary(segments: Array<{ title: string; summary: string; range: string; keywords?: string[]; lines: { text: string }[] }>) {
+  const combined = segments.map((segment) => segment.lines.map((line) => line.text).join(' ')).join(' ');
+  return {
+    overview: summary(combined || segments.map((segment) => segment.summary).join(' ')),
+    parts: segments.map((segment) => ({
+      title: segment.title,
+      range: segment.range,
+      summary: segment.summary,
+      keywords: segment.keywords || [],
+    })),
+  };
+}
 function summary(text: string) {
   const s = clean(text).match(/[^.!?]+[.!?]*/g)?.map((x) => x.trim()).filter(Boolean) || [clean(text)];
   const picked = s.find((x) => x.split(/\s+/).length >= 8) || s[0] || '';
@@ -83,6 +99,8 @@ export async function POST(request: Request) {
   if (!lines.length) return Response.json({ error: 'No transcript lines found.' }, { status: 400 });
   const segments = segment(lines);
   const duration = Math.max(...lines.map((x) => x.offset + x.duration), 0);
+  const readableText = readableTranscript(lines);
+  const aiSummary = buildAiSummary(segments);
   return Response.json({
     videoId: null,
     url: null,
@@ -97,5 +115,7 @@ export async function POST(request: Request) {
     outline: segments.map((s) => ({ id: s.id, title: s.title, start: s.start, end: s.end, range: s.range, summary: s.summary, keywords: s.keywords })),
     segments,
     fullText: lines.map((line) => `[${fmt(line.offset)}] ${line.text}`).join('\n'),
+    readableText,
+    aiSummary,
   });
 }

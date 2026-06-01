@@ -106,6 +106,23 @@ function titleFor(text: string, index: number) {
   const prefixes = ['Opening', 'Focus', 'Deep dive', 'Key ideas', 'Examples', 'Takeaways'];
   return `${prefixes[Math.min(index, prefixes.length - 1)]}: ${pretty}`;
 }
+function readableTranscript(lines: { text: string }[]) {
+  return cleanText(lines.map((line) => line.text).join(' '));
+}
+
+function buildAiSummary(segments: Array<{ title: string; summary: string; range: string; keywords?: string[]; lines: { text: string }[] }>) {
+  const combined = segments.map((segment) => segment.lines.map((line) => line.text).join(' ')).join(' ');
+  return {
+    overview: sentenceSummary(combined || segments.map((segment) => segment.summary).join(' '), 55),
+    parts: segments.map((segment) => ({
+      title: segment.title,
+      range: segment.range,
+      summary: segment.summary,
+      keywords: segment.keywords || [],
+    })),
+  };
+}
+
 
 function makeSegments(items: TranscriptItem[]) {
   const totalDuration = Math.max(...items.map((item) => item.offset + item.duration), 0);
