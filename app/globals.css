@@ -129,10 +129,34 @@ button:disabled { cursor: not-allowed; opacity: .65; }
 .footer { max-width:1180px; margin: 0 auto; padding: 34px 24px 60px; color:#777; font-size: 13px; line-height:1.5; }
 .footer a { color:#171717; }
 
+
+.chat-panel { scroll-margin-top: 96px; }
+.chat-body { padding: 18px; display: grid; gap: 14px; }
+.chat-intro { margin: 0; color: #4d4d4d; line-height: 1.55; }
+.chat-suggestions { display: flex; flex-wrap: wrap; gap: 8px; }
+.chat-suggestions button { border: 0; border-radius: 999px; background: #f5f5f5; color: #333; padding: 8px 10px; font-size: 13px; }
+.chat-suggestions button:hover { background: #ebf5ff; color: #0068d6; }
+.chat-log { display: grid; gap: 12px; max-height: 460px; overflow: auto; padding: 4px; }
+.chat-empty { color: var(--muted); background: #fafafa; border-radius: 14px; padding: 14px; text-align: center; }
+.chat-message { display: grid; gap: 8px; }
+.chat-message.user { justify-items: end; }
+.chat-message.assistant { justify-items: start; }
+.chat-bubble { max-width: 88%; border-radius: 16px; padding: 12px 14px; line-height: 1.55; box-shadow: rgba(0,0,0,.08) 0 0 0 1px; }
+.chat-bubble p { margin: 0 0 8px; white-space: pre-wrap; }
+.chat-bubble p:last-child { margin-bottom: 0; }
+.chat-message.user .chat-bubble { background: #171717; color: #fff; }
+.chat-message.assistant .chat-bubble { background: #fff; color: #242424; }
+.citations { width: 100%; background: #fafafa; border-radius: 14px; padding: 12px; display: grid; gap: 8px; }
+.citation { display: grid; grid-template-columns: 58px minmax(0, 1fr); gap: 8px; font-size: 12px; color: #555; }
+.citation time { color: var(--blue); font-family: 'Geist Mono', monospace; }
+.chat-input-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
+
 @media (max-width: 940px) {
   .app-shell, .section-grid { grid-template-columns: 1fr; }
   .outline { position: static; }
   .feature-grid { grid-template-columns: 1fr; }
+  .chat-input-row { grid-template-columns: 1fr; }
+  .chat-input-row .btn { justify-content: center; }
   .nav-links { display:none; }
 }
 @media (max-width: 560px) {
