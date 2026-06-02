@@ -2,7 +2,7 @@ export const runtime = 'edge';
 
 type ManualLine = { text: string; offset: number; duration: number; time?: string };
 
-const STOPWORDS = new Set('the a an and or but so because to of in on for with from at by is are was were be been being i you we they he she it this that these those as into about like not no do does did can could should would will just if than then there their our your my me us them his her its what when where why how which who also more most some any all one two three get got going really actually right okay kind sort think know make made see use using used new first next last very over under up down out'.split(' '));
+const STOPWORDS = new Set('the a an and or but so because to of in on for with from at by is are was were be been being i im you we they he she it this that these those as into about like not no do does did can could should would will just if than then there their our your my me us them his her its what when where why how which who also more most some any all one two three get got going really actually right okay kind sort think know make made see use using used new first next last very over under up down out its thats theres youre were theyre ill youll well theyll ive youve weve id youd wed dont doesnt didnt cant couldnt shouldnt wouldnt wont isnt arent wasnt werent'.split(' '));
 
 function fmt(seconds: number) {
   const total = Math.max(0, Math.floor(seconds));
@@ -18,12 +18,24 @@ function parseTime(token: string) {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0];
 }
-function clean(text: string) { return text.replace(/(?:^|\s)\[?(?:\d+:)?\d{1,2}:\d{2}\]?\s*/g, ' ').replace(/\s+/g, ' ').trim(); }
-function words(text: string) { return text.toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !STOPWORDS.has(w)); }
+function clean(text: string) { return text.replace(/\s+/g, ' ').trim(); }
+function normalizeWord(word: string) {
+  return word.toLowerCase().replace(/[’']/g, '').replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
+}
+function words(text: string) {
+  return text.split(/\s+/).map(normalizeWord).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
+}
 function topKeywords(text: string, n = 5) {
   const counts = new Map<string, number>();
   for (const w of words(text)) counts.set(w, (counts.get(w) || 0) + 1);
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([w]) => w);
+}
+function ideaLabel(text: string, index: number) {
+  const ordered = Array.from(new Set(words(clean(text).split(/[.!?]/)[0] || text))).slice(0, 6);
+  const keys = ordered.length ? ordered : topKeywords(text, 6);
+  const label = keys.map((k) => k.charAt(0).toUpperCase() + k.slice(1)).join(' ');
+  const prefixes = ['Opening', 'Focus', 'Deep dive', 'Key ideas', 'Examples', 'Takeaways'];
+  return label ? `${prefixes[Math.min(index, prefixes.length - 1)]}: ${label}` : `Section ${index + 1}`;
 }
 function readableTranscript(lines: { text: string }[]) {
   return clean(lines.map((line) => line.text).join(' '));
@@ -46,11 +58,7 @@ function summary(text: string) {
   const picked = s.find((x) => x.split(/\s+/).length >= 8) || s[0] || '';
   return picked.split(/\s+/).slice(0, 34).join(' ') + (picked.split(/\s+/).length > 34 ? '…' : '');
 }
-function title(text: string, i: number) {
-  const keys = topKeywords(text, 4);
-  const prefixes = ['Opening', 'Focus', 'Deep dive', 'Key ideas', 'Examples', 'Takeaways'];
-  return keys.length ? `${prefixes[Math.min(i, prefixes.length - 1)]}: ${keys.map((k) => k[0].toUpperCase() + k.slice(1)).join(' · ')}` : `Section ${i + 1}`;
-}
+function title(text: string, i: number) { return ideaLabel(text, i); }
 function parseManual(text: string) {
   const rows = text.split(/\n+/).map((line) => line.trim()).filter(Boolean);
   let fallback = 0;

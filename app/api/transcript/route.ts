@@ -16,7 +16,7 @@ type Segment = {
   keywords: string[];
 };
 
-const STOPWORDS = new Set('the a an and or but so because to of in on for with from at by is are was were be been being i you we they he she it this that these those as into about like not no do does did can could should would will just if than then there their our your my me us them his her its what when where why how which who also more most some any all one two three get got going really actually right okay kind sort think know make made see use using used new first next last very over under up down out'.split(' '));
+const STOPWORDS = new Set('the a an and or but so because to of in on for with from at by is are was were be been being i im you we they he she it this that these those as into about like not no do does did can could should would will just if than then there their our your my me us them his her its what when where why how which who also more most some any all one two three get got going really actually right okay kind sort think know make made see use using used new first next last very over under up down out its thats theres youre were theyre ill youll well theyll ive youve weve id youd wed dont doesnt didnt cant couldnt shouldnt wouldnt wont isnt arent wasnt werent'.split(' '));
 const INNERTUBE_URL = 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
 const TRANSCRIPT_PROXY_URL = process.env.TRANSCRIPT_PROXY_URL || 'https://graduated-solaris-jackets-inventory.trycloudflare.com/transcript';
 
@@ -81,14 +81,26 @@ function cleanText(text: string) {
   return decodeEntities(text).replace(/\s+/g, ' ').trim();
 }
 
+function normalizeWord(word: string) {
+  return word.toLowerCase().replace(/[’']/g, '').replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '');
+}
+
 function words(text: string) {
-  return text.toLowerCase().replace(/[^a-z0-9\s'-]/g, ' ').split(/\s+/).map((w) => w.replace(/^'+|'+$/g, '')).filter((w) => w.length > 2 && !STOPWORDS.has(w));
+  return text.split(/\s+/).map(normalizeWord).filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
 }
 
 function topKeywords(text: string, n = 5) {
   const counts = new Map<string, number>();
   for (const w of words(text)) counts.set(w, (counts.get(w) || 0) + 1);
-  return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+  return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([w]) => w);
+}
+
+function ideaLabel(text: string, index: number) {
+  const ordered = Array.from(new Set(words(cleanText(text).split(/[.!?]/)[0] || text))).slice(0, 6);
+  const keys = ordered.length ? ordered : topKeywords(text, 6);
+  const label = keys.map((k) => k.charAt(0).toUpperCase() + k.slice(1)).join(' ');
+  const prefixes = ['Opening', 'Focus', 'Deep dive', 'Key ideas', 'Examples', 'Takeaways'];
+  return label ? `${prefixes[Math.min(index, prefixes.length - 1)]}: ${label}` : `Section ${index + 1}`;
 }
 
 function sentenceSummary(text: string, maxWords = 34) {
@@ -99,13 +111,7 @@ function sentenceSummary(text: string, maxWords = 34) {
   return list + (candidate.split(/\s+/).length > maxWords ? '…' : '');
 }
 
-function titleFor(text: string, index: number) {
-  const keys = topKeywords(text, 4);
-  if (!keys.length) return `Section ${index + 1}`;
-  const pretty = keys.map((k) => k.charAt(0).toUpperCase() + k.slice(1)).join(' · ');
-  const prefixes = ['Opening', 'Focus', 'Deep dive', 'Key ideas', 'Examples', 'Takeaways'];
-  return `${prefixes[Math.min(index, prefixes.length - 1)]}: ${pretty}`;
-}
+function titleFor(text: string, index: number) { return ideaLabel(text, index); }
 function readableTranscript(lines: { text: string }[]) {
   return cleanText(lines.map((line) => line.text).join(' '));
 }

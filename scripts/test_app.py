@@ -100,6 +100,24 @@ try:
     assert len(ai_summary.get('parts', [])) == len(manual_data.get('segments', []))
     assert all(part.get('range') and part.get('summary') for part in ai_summary.get('parts', []))
 
+
+
+    idea_status, idea_data = post('/api/manual', {
+        'title': 'Idea keyword smoke',
+        'transcript': "[0:00] The the the I'm I'm first set up keyboard shortcuts for faster Mac navigation.\n[0:12] I'm showing how to configure trackpad gestures and app shortcuts for productivity."
+    })
+    print('IDEA_STATUS', idea_status)
+    idea_parts = idea_data.get('aiSummary', {}).get('parts', [])
+    idea_titles = ' '.join(part.get('title', '') for part in idea_parts).lower()
+    idea_keywords = [kw.lower() for part in idea_parts for kw in part.get('keywords', [])]
+    print('IDEA_TITLES', idea_titles)
+    print('IDEA_KEYWORDS', ','.join(idea_keywords))
+    assert idea_status == 200
+    assert "i'm" not in idea_titles
+    assert 'the' not in idea_keywords
+    assert "i'm" not in idea_keywords
+    assert any(word in idea_titles for word in ['keyboard', 'shortcuts', 'trackpad', 'gestures', 'navigation'])
+
     chat_status, chat_data = post('/api/chat', {
         'question': 'What are the setup steps?',
         'title': manual_data.get('title'),
