@@ -1,18 +1,19 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { AlertTriangle, BookOpen, CheckCircle2, Clipboard, Download, FileText, Layers3, Loader2, MessageSquareText, Play, RefreshCw, Send, Sparkles, Wand2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Clipboard, Download, FileText, Loader2, MessageSquareText, Play, RefreshCw, Send, Sparkles, Wand2 } from 'lucide-react';
 
 type Line = { text: string; offset: number; duration: number; time: string };
 type Segment = { id: string; title: string; summary: string; start: number; end: number; range: string; keywords: string[]; lines: Line[] };
 type ChatMessage = { role: 'user' | 'assistant'; text: string; citations?: Array<{ time: string; text: string; section: string }> };
+type View = 'chat' | 'summary' | 'transcript' | 'outline';
 
 type Result = {
   videoId: string | null; url: string | null; title: string; author: string | null; thumbnail: string | null;
   durationLabel: string; transcriptCount: number; wordCount: number; languageNote: string;
   outline: Array<{ id: string; title: string; range: string; summary: string; keywords: string[] }>;
-  segments: Segment[]; fullText: string; readableText?: string;
-  aiSummary?: { overview: string; parts: Array<{ title: string; range: string; summary: string; keywords: string[] }> };
+  segments: Segment[]; fullText: string; readableText: string;
+  aiSummary: { overview: string; parts: Array<{ title: string; range: string; summary: string; keywords: string[] }> };
 };
 
 const EXAMPLE = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ';
@@ -40,37 +41,17 @@ function cleanReadableText(result: Result) {
 }
 
 function resultAsMarkdown(result: Result) {
-  return `# ${result.title}
-
-Author: ${result.author || 'Unknown'}
-Duration: ${result.durationLabel}
-Words: ${result.wordCount}
-
-## AI summary
-${summaryOverview(result)}
-
-${summaryParts(result).map((part, i) => `${i + 1}. **${part.title}** (${part.range}) — ${part.summary}`).join('\n')}
-
-## Clean paragraph transcript
-${cleanReadableText(result)}
-
-## Outline
-${result.outline.map((s, i) => `${i + 1}. **${s.title}** (${s.range}) — ${s.summary}`).join('\n')}
-
-## Segmented transcript
-${result.segments.map((s) => `### ${s.title} (${s.range})
-${s.summary}
-
-${s.lines.map((l) => `[${l.time}] ${l.text}`).join('\n')}`).join('\n\n')}
-`;
+  return `# ${result.title}\n\nAuthor: ${result.author || 'Unknown'}\nDuration: ${result.durationLabel}\nWords: ${result.wordCount}\n\n## AI summary\n${summaryOverview(result)}\n\n${summaryParts(result).map((part, i) => `${i + 1}. **${part.title}** (${part.range}) — ${part.summary}`).join('\n')}\n\n## Clean paragraph transcript\n${cleanReadableText(result)}\n\n## Outline\n${result.outline.map((s, i) => `${i + 1}. **${s.title}** (${s.range}) — ${s.summary}`).join('\n')}\n\n## Segmented transcript\n${result.segments.map((s) => `### ${s.title} (${s.range})\n${s.summary}\n\n${s.lines.map((l) => `[${l.time}] ${l.text}`).join('\n')}`).join('\n\n')}\n`;
 }
+
 export default function Home() {
   const [mode, setMode] = useState<'youtube' | 'manual'>('youtube');
+  const [view, setView] = useState<View>('chat');
   const [url, setUrl] = useState('');
   const [manual, setManual] = useState('');
   const [manualTitle, setManualTitle] = useState('Manual transcript');
   const [result, setResult] = useState<Result | null>(null);
-  const [status, setStatus] = useState<{ kind: 'info' | 'error' | 'ok' | 'warn'; text: string } | null>({ kind: 'info', text: 'Paste a YouTube URL or use manual mode if captions are unavailable.' });
+  const [status, setStatus] = useState<{ kind: 'info' | 'error' | 'ok' | 'warn'; text: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [chatQuestion, setChatQuestion] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
@@ -79,14 +60,14 @@ export default function Home() {
   const markdown = useMemo(() => result ? resultAsMarkdown(result) : '', [result]);
 
   async function submit() {
-    setLoading(true); setResult(null); setStatus({ kind: 'info', text: mode === 'youtube' ? 'Fetching captions from YouTube and building topic sections…' : 'Parsing your pasted transcript and creating sections…' });
+    setLoading(true); setResult(null); setChatMessages([]); setChatQuestion(''); setStatus({ kind: 'info', text: 'Generating…' });
     try {
       const endpoint = mode === 'youtube' ? '/api/transcript' : '/api/manual';
       const body = mode === 'youtube' ? { url } : { transcript: manual, title: manualTitle };
       const res = await fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Something went wrong.');
-      setResult(data); setChatMessages([]); setChatQuestion(''); setStatus({ kind: 'ok', text: `Created ${data.outline.length} timestamped sections from ${data.transcriptCount} caption lines. You can now ask questions about the video.` });
+      setResult(data); setView('chat'); setStatus({ kind: 'ok', text: 'Ready. Ask questions, read the summary, or export notes.' });
     } catch (error) {
       setStatus({ kind: 'error', text: error instanceof Error ? error.message : String(error) });
     } finally { setLoading(false); }
@@ -95,20 +76,18 @@ export default function Home() {
   function copyMarkdown() {
     if (!markdown) return;
     navigator.clipboard.writeText(markdown);
-    setStatus({ kind: 'ok', text: 'Copied outlined transcript as Markdown.' });
+    setStatus({ kind: 'ok', text: 'Copied Markdown.' });
   }
 
   async function askVideo(preset?: string) {
     if (!result || chatLoading) return;
     const question = (preset || chatQuestion).trim();
     if (!question) return;
-    setChatQuestion('');
-    setChatLoading(true);
+    setChatQuestion(''); setChatLoading(true);
     setChatMessages((messages) => [...messages, { role: 'user', text: question }]);
     try {
       const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        method: 'POST', headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ question, title: result.title, segments: result.segments, readableText: cleanReadableText(result) }),
       });
       const data = await res.json();
@@ -116,80 +95,59 @@ export default function Home() {
       setChatMessages((messages) => [...messages, { role: 'assistant', text: data.answer, citations: data.citations || [] }]);
     } catch (error) {
       setChatMessages((messages) => [...messages, { role: 'assistant', text: error instanceof Error ? error.message : String(error) }]);
-    } finally {
-      setChatLoading(false);
-    }
+    } finally { setChatLoading(false); }
   }
+
+  const canSubmit = mode === 'youtube' ? url.trim() : manual.trim();
+  const tabs: Array<[View, string]> = [['chat', 'Ask the video'], ['summary', 'AI summary'], ['transcript', 'Clean transcript'], ['outline', 'Outline']];
 
   return (
     <main className="page">
-      <nav className="nav">
-        <div className="nav-inner">
-          <div className="brand"><div className="logo">▶</div> Transcript Outliner</div>
-          <div className="nav-links"><a href="#tool">Tool</a><a href="#video-chat">Ask AI</a><a href="#summary">AI Summary</a><a href="#clean-transcript">Clean transcript</a><a href="#outline">Outline</a><a href="#limits">Limitations</a></div>
-        </div>
-      </nav>
+      <nav className="nav"><div className="nav-inner"><div className="brand"><span className="logo">▶</span> Transcript Outliner</div><div className="nav-links"><span>View:</span><a href="#tool">Generate</a><a href="#results">Results</a></div></div></nav>
 
-      <section className="hero">
-        <div className="badge-row"><span className="badge">YouTube captions → study notes</span><span className="badge pink">Timestamped sections</span><span className="badge red">Manual fallback</span></div>
-        <h1>Turn a YouTube video into an outlined transcript.</h1>
-        <p>Paste a link and get clean chapters, an AI-style summary of each part, a chat box for questions about the video, a timestamp-free paragraph transcript, copyable Markdown, and downloadable notes. No word soup.</p>
+      <section className="hero compact">
+        <h1>Transcript Outliner</h1>
+        <p>Paste a YouTube link or transcript. Get a clean summary, searchable chat, readable transcript, and exportable notes.</p>
       </section>
 
-      <section id="tool" className="app-shell">
-        <div className="panel">
-          <div className="panel-head">
-            <div><h2 className="panel-title">Generate transcript outline</h2><p className="panel-sub">Fetch public captions or paste your own transcript.</p></div>
-            <div className="toggle"><button className={mode === 'youtube' ? 'active' : ''} onClick={() => setMode('youtube')}>YouTube URL</button><button className={mode === 'manual' ? 'active' : ''} onClick={() => setMode('manual')}>Manual</button></div>
-          </div>
-          <div className="panel-pad input-wrap">
-            {mode === 'youtube' ? <>
-              <input className="url-input" placeholder="https://www.youtube.com/watch?v=…" value={url} onChange={(e) => setUrl(e.target.value)} />
-              <div className="actions"><button className="btn btn-primary" disabled={loading || !url.trim()} onClick={submit}>{loading ? <span className="loader"/> : <Wand2 size={17}/>} Generate transcript</button><button className="btn btn-ghost" onClick={() => setUrl(EXAMPLE)}><Play size={16}/>Try example URL</button></div>
-            </> : <>
-              <input className="url-input" placeholder="Title for pasted transcript" value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} />
-              <textarea className="manual-input" placeholder="Paste transcript lines. Timestamps like [3:24] are preserved; plain lines also work." value={manual} onChange={(e) => setManual(e.target.value)} />
-              <div className="actions"><button className="btn btn-primary" disabled={loading || !manual.trim()} onClick={submit}>{loading ? <span className="loader"/> : <Sparkles size={17}/>} Outline pasted text</button><button className="btn btn-ghost" onClick={() => setManual(SAMPLE_TRANSCRIPT)}><FileText size={16}/>Load sample</button></div>
-            </>}
-            {status && <div className={`status ${status.kind}`}>{status.kind === 'error' ? <AlertTriangle size={18}/> : status.kind === 'ok' ? <CheckCircle2 size={18}/> : loading ? <Loader2 size={18}/> : <BookOpen size={18}/>}<span>{status.text}</span></div>}
-            <div className="feature-grid">
-              <div className="feature"><Layers3 size={18}/><strong>Segmented</strong><span>Groups captions into scan-friendly sections with timestamp ranges.</span></div>
-              <div className="feature"><Sparkles size={18}/><strong>AI summary</strong><span>Highlights the main idea and summarizes each part of the video.</span></div>
-              <div className="feature"><MessageSquareText size={18}/><strong>Ask the video</strong><span>Chat with the transcript to pull out lists, answers, and cited moments.</span></div>
-            </div>
-          </div>
+      <section id="tool" className="tool-card panel">
+        <div className="mode-row"><button className={mode === 'youtube' ? 'active' : ''} onClick={() => setMode('youtube')}>YouTube URL</button><button className={mode === 'manual' ? 'active' : ''} onClick={() => setMode('manual')}>Paste transcript</button></div>
+        <div className="input-area">
+          {mode === 'youtube' ? <>
+            <input className="url-input" placeholder="https://www.youtube.com/watch?v=…" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <button className="btn btn-primary" disabled={loading || !canSubmit} onClick={submit}>{loading ? <span className="loader"/> : <Wand2 size={17}/>} Generate</button>
+            <button className="btn btn-ghost" onClick={() => setUrl(EXAMPLE)}><Play size={16}/> Example</button>
+          </> : <>
+            <input className="url-input" placeholder="Title" value={manualTitle} onChange={(e) => setManualTitle(e.target.value)} />
+            <textarea className="manual-input" placeholder="Paste transcript text…" value={manual} onChange={(e) => setManual(e.target.value)} />
+            <button className="btn btn-primary" disabled={loading || !canSubmit} onClick={submit}>{loading ? <span className="loader"/> : <Sparkles size={17}/>} Generate</button>
+            <button className="btn btn-ghost" onClick={() => setManual(SAMPLE_TRANSCRIPT)}><FileText size={16}/> Sample</button>
+          </>}
         </div>
-
-        <aside className="panel">
-          <div className="panel-head"><div><h2 className="panel-title">How it handles captions</h2><p className="panel-sub">Designed around YouTube’s real-world limits.</p></div></div>
-          <div className="panel-pad meta-grid" id="limits">
-            <div className="meta-card"><div className="meta-label">Primary path</div><div className="meta-value">Public YouTube captions</div><p className="tiny">Uses server-side caption fetching so browsers do not hit CORS issues.</p></div>
-            <div className="meta-card"><div className="meta-label">Fallback</div><div className="meta-value">Manual transcript mode</div><p className="tiny">If a video has captions disabled or YouTube blocks cloud requests, paste subtitles/transcript text directly.</p></div>
-            <div className="meta-card"><div className="meta-label">Output</div><div className="meta-value">Summary + Q&A + clean transcript + Markdown</div><p className="tiny">No fabricated transcript text. Answers cite returned or pasted captions.</p></div>
-          </div>
-        </aside>
+        {status && <div className={`status ${status.kind}`}>{status.kind === 'error' ? <AlertTriangle size={18}/> : status.kind === 'ok' ? <CheckCircle2 size={18}/> : <Loader2 size={18}/>}<span>{status.text}</span></div>}
       </section>
 
-      <section className="results" id="outline">
-        {!result && <div className="panel empty"><Sparkles size={28}/><h2>Your outlined transcript will appear here.</h2><p>Expect a video header, Ask the video chat, AI summary, clean paragraph transcript, clickable outline, and timestamped transcript lines.</p></div>}
+      <section className="results" id="results">
+        {!result && <div className="panel empty"><Sparkles size={26}/><h2>Results will appear here.</h2><p>Ask the video, read the AI summary, view the clean paragraph transcript, or open the outline.</p></div>}
         {result && <>
-          <div className="panel panel-pad video-head">
-            <div><h2 className="video-title">{result.title}</h2><div className="kpis"><span className="kpi">{result.author || 'Unknown author'}</span><span className="kpi">{result.durationLabel}</span><span className="kpi">{result.wordCount.toLocaleString()} keywords/words</span><span className="kpi">{result.transcriptCount} caption lines</span></div><p className="tiny">{result.languageNote}</p></div>
-            <div className="actions"><button className="btn btn-blue" onClick={copyMarkdown}><Clipboard size={16}/>Copy Markdown</button><button className="btn btn-ghost" onClick={() => downloadText('transcript-outline.md', markdown)}><Download size={16}/>Download</button><button className="btn btn-ghost" onClick={() => { setResult(null); setChatMessages([]); setChatQuestion(''); setStatus({ kind: 'info', text: 'Ready for another video.' }); }}><RefreshCw size={16}/>Reset</button></div>
+          <div className="panel result-head">
+            <div><h2>{result.title}</h2><p>{result.author || 'Unknown author'} · {result.durationLabel} · {result.transcriptCount} lines · {result.wordCount.toLocaleString()} words</p></div>
+            <div className="actions"><button className="btn btn-blue" onClick={copyMarkdown}><Clipboard size={16}/>Copy</button><button className="btn btn-ghost" onClick={() => downloadText('transcript-outline.md', markdown)}><Download size={16}/>Download</button><button className="btn btn-ghost" onClick={() => { setResult(null); setChatMessages([]); setStatus(null); }}><RefreshCw size={16}/>New</button></div>
           </div>
-          <div className="section-grid">
-            <aside className="outline panel panel-pad"><div className="meta-label">Jump to</div><a href="#video-chat"><time>Interactive</time>Ask the video</a><a href="#summary"><time>Overview</time>AI summary</a><a href="#clean-transcript"><time>No timestamps</time>Clean paragraph transcript</a>{result.outline.map((s) => <a key={s.id} href={`#${s.id}`}><time>{s.range}</time>{s.title}</a>)}</aside>
-            <div className="segments">
-              <article className="segment chat-panel" id="video-chat"><div className="segment-top"><h3>Ask the video</h3><span className="time-pill">Transcript Q&A</span></div><div className="chat-body"><p className="chat-intro">Ask questions like “What are the 24 things?”, “Turn this into a checklist,” or “Where does it talk about setup?” Answers are grounded in the transcript.</p><div className="chat-suggestions"><button onClick={() => askVideo('What are the main things or steps in this video?')}>List the main things</button><button onClick={() => askVideo('Turn the video into a checklist.')}>Make a checklist</button><button onClick={() => askVideo('What are the key takeaways?')}>Key takeaways</button></div><div className="chat-log">{chatMessages.length === 0 ? <div className="chat-empty">Ask a question to explore this video interactively.</div> : chatMessages.map((message, i) => <div className={`chat-message ${message.role}`} key={i}><div className="chat-bubble">{message.text.split('\n').map((line, j) => <p key={j}>{line}</p>)}</div>{message.citations?.length ? <div className="citations"><div className="meta-label">Transcript citations</div>{message.citations.map((citation, j) => <div className="citation" key={`${citation.time}-${j}`}><time>{citation.time}</time><span>{citation.text}</span></div>)}</div> : null}</div>)}</div><div className="chat-input-row"><input className="url-input" placeholder="Ask something about this video…" value={chatQuestion} onChange={(e) => setChatQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') askVideo(); }} /><button className="btn btn-blue" disabled={chatLoading || !chatQuestion.trim()} onClick={() => askVideo()}>{chatLoading ? <span className="loader"/> : <Send size={16}/>}Ask</button></div></div></article>
-              <article className="segment summary-panel" id="summary"><div className="segment-top"><h3>AI summary</h3><span className="time-pill">{result.durationLabel}</span></div><div className="summary overview">{summaryOverview(result)}</div><div className="part-list">{summaryParts(result).map((part, i) => <div className="part-card" key={`${part.range}-${i}`}><div><strong>{part.title}</strong><time>{part.range}</time></div><p>{part.summary}</p>{part.keywords?.length ? <div className="keyword-row">{part.keywords.map((keyword) => <span key={keyword}>{keyword}</span>)}</div> : null}</div>)}</div></article>
-              <article className="segment" id="clean-transcript"><div className="segment-top"><h3>Clean paragraph transcript</h3><span className="time-pill">No timestamps</span></div><div className="readable-transcript">{cleanReadableText(result).split(/(?<=[.!?])\s+/).filter(Boolean).map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div></article>
-              {result.segments.map((segment) => <article className="segment" id={segment.id} key={segment.id}><div className="segment-top"><h3>{segment.title}</h3><span className="time-pill">{segment.range}</span></div><div className="summary">{segment.summary}</div><div className="transcript">{segment.lines.map((line, i) => <p className="caption-line" key={`${segment.id}-${i}`}><time>{line.time}</time>{line.text}</p>)}</div></article>)}
-            </div>
-          </div>
+
+          <div className="view-tabs">{tabs.map(([key, label]) => <button key={key} className={view === key ? 'active' : ''} onClick={() => setView(key)}>{label}</button>)}</div>
+
+          {view === 'chat' && <article className="panel section-card" id="video-chat"><div className="section-top"><h3>Ask the video</h3><MessageSquareText size={18}/></div><div className="chat-body"><div className="chat-suggestions"><button onClick={() => askVideo('What are the main things or steps in this video?')}>List the main things</button><button onClick={() => askVideo('Turn the video into a checklist.')}>Make a checklist</button><button onClick={() => askVideo('What are the key takeaways?')}>Key takeaways</button></div><div className="chat-log">{chatMessages.length === 0 ? <div className="chat-empty">Ask anything about the transcript.</div> : chatMessages.map((message, i) => <div className={`chat-message ${message.role}`} key={i}><div className="chat-bubble">{message.text.split('\n').map((line, j) => <p key={j}>{line}</p>)}</div>{message.citations?.length ? <div className="citations">{message.citations.map((citation, j) => <div className="citation" key={`${citation.time}-${j}`}><time>{citation.time}</time><span>{citation.text}</span></div>)}</div> : null}</div>)}</div><div className="chat-input-row"><input className="url-input" placeholder="Ask something about this video…" value={chatQuestion} onChange={(e) => setChatQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') askVideo(); }} /><button className="btn btn-blue" disabled={chatLoading || !chatQuestion.trim()} onClick={() => askVideo()}>{chatLoading ? <span className="loader"/> : <Send size={16}/>}Ask</button></div></div></article>}
+
+          {view === 'summary' && <article className="panel section-card" id="summary"><div className="section-top"><h3>AI summary</h3><span>{result.durationLabel}</span></div><p className="overview">{summaryOverview(result)}</p><div className="part-list">{summaryParts(result).map((part, i) => <div className="part-card" key={`${part.range}-${i}`}><div><strong>{part.title}</strong><time>{part.range}</time></div><p>{part.summary}</p></div>)}</div></article>}
+
+          {view === 'transcript' && <article className="panel section-card" id="clean-transcript"><div className="section-top"><h3>Clean paragraph transcript</h3><span>No timestamps</span></div><div className="readable-transcript">{cleanReadableText(result).split(/(?<=[.!?])\s+/).filter(Boolean).map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div></article>}
+
+          {view === 'outline' && <div className="outline-list" id="outline">{result.segments.map((segment) => <article className="panel section-card compact-section" id={segment.id} key={segment.id}><div className="section-top"><h3>{segment.title}</h3><span>{segment.range}</span></div><p className="summary">{segment.summary}</p><details><summary>Timestamped transcript</summary><div className="transcript">{segment.lines.map((line, i) => <p className="caption-line" key={`${segment.id}-${i}`}><time>{line.time}</time>{line.text}</p>)}</div></details></article>)}</div>}
         </>}
       </section>
 
-      <footer className="footer">Built as a free, public Next.js + Vercel app. YouTube captions are only available when the video exposes them; answers are grounded in the transcript, and manual mode remains the reliable fallback.</footer>
+      <footer className="footer">Free transcript notes powered by your video captions.</footer>
     </main>
   );
 }

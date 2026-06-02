@@ -66,6 +66,10 @@ try:
     assert 'AI summary' in html
     assert 'clean paragraph transcript' in html
     assert 'Ask the video' in html
+    assert 'How it handles captions' not in html
+    assert 'Primary path' not in html
+    assert 'Designed around YouTube' not in html
+    assert 'View:' in html
 
     def post(path, payload):
         data = json.dumps(payload).encode()
